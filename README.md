@@ -1,16 +1,16 @@
 <div align="center">
   <h1>Beyond Global Similarity: Towards Fine-Grained, Multi-Condition Multimodal Retrieval (CVPR 2026)</h1>
+  <p align="center">
+  <a href="https://arxiv.org/abs/2603.01082"><img src="https://img.shields.io/badge/Paper-arXiv-b31b1b.svg" alt="Paper"></a>
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-green.svg" alt="License"></a>
+  <a href="https://huggingface.co/datasets/Lux1997/MCMR" target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace%20Datasets-27b3b4.svg></a>
+</p>
   Xuan Lu<sup>1,2,3</sup>, Kangle Li<sup>1,2*</sup>, Haohang Huang<sup>3</sup>, Rui Meng, Wenjun Zeng<sup>2,3</sup>, Xiaoyu Shen<sup>2,3</sup><br/>
   <sup>1</sup> Shanghai Jiao Tong University (SJTU)<br/>
   <sup>2</sup> Institute of Digital Twin, Eastern Institute of Technology (EIT), Ningbo<br/>
   <sup>3</sup> Ningbo Key Laboratory of Spatial Intelligence and Digital Derivative
 </div>
 
-<p align="center">
-  <a href="https://arxiv.org/abs/2603.01082"><img src="https://img.shields.io/badge/Paper-arXiv-b31b1b.svg" alt="Paper"></a>
-  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-green.svg" alt="License"></a>
-  <a href="https://huggingface.co/datasets/Lux1997/MCMR" target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace%20Datasets-27b3b4.svg></a>
-</p>
 
 <!-- <p align="center" width="100%">
   <a target="_blank">
