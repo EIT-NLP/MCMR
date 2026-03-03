@@ -12,20 +12,18 @@
 </div>
 
 
-<p align="center" width="80%">
+## **🌟 Introduction**
+
+**MCMR (Multi-Conditional Multimodal Retrieval)** is a large-scale, high-difficulty benchmark designed to evaluate fine-grained and multi-condition cross-modal retrieval. Unlike traditional retrieval tasks that rely on coarse-grained global similarity, MCMR emphasizes the alignment of complex, interdependent constraints across visual and textual modalities.
+
+<p align="center" width="50%">
   <a target="_blank">
     <img src="/assets/mcmr.jpg" alt="MCMR Overview" style="width: 90%; min-width: 200px; display: block; margin: auto;">
   </a>
 </p> 
 
-
-## **🌟 Introduction**
-
-**MCMR (Multi-Conditional Multimodal Retrieval)** is a large-scale, high-difficulty benchmark designed to evaluate fine-grained and multi-condition cross-modal retrieval. Unlike traditional retrieval tasks that rely on coarse-grained global similarity, MCMR emphasizes the alignment of complex, interdependent constraints across visual and textual modalities.
-
 - **Diverse Domain Coverage:** Spans five distinct product domains: Upper Clothing, Bottom Clothing, Jewelry, Shoes, and Furniture.
 - **Fine-grained Multi-Condition Queries:** Each query integrates complementary visual cues and textual attributes, requiring models to satisfy all specified constraints simultaneously.
-
 
 - **Rich Contextual Metadata:** Preserves long-form textual metadata to facilitate research on compositional matching and complex attribute reasoning.
 - **Standardized Evaluation Framework:**  Provides a unified implementation for both MLLM-based retrievers (e.g., CORAL, VLM2Vec) and vision-language rerankers (e.g., Qwen-VL, InternVL).
