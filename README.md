@@ -1,6 +1,6 @@
 <div align="center">
   <h1>Beyond Global Similarity: Towards Fine-Grained, Multi-Condition Multimodal Retrieval (CVPR 2026)</h1>
-  Xuan Lu<sup>1,2,3</sup>, Kangle Li<sup>1,2*</sup>, Haohang Huang<sup>3</sup>, Rui Meng<sup>1</sup>, Wenjun Zeng<sup>2,3</sup>, Xiaoyu Shen<sup>2,3</sup><br/>
+  Xuan Lu<sup>1,2,3</sup>, Kangle Li<sup>1,2*</sup>, Haohang Huang<sup>3</sup>, Rui Meng, Wenjun Zeng<sup>2,3</sup>, Xiaoyu Shen<sup>2,3</sup><br/>
   <sup>1</sup> Shanghai Jiao Tong University (SJTU)<br/>
   <sup>2</sup> Institute of Digital Twin, Eastern Institute of Technology (EIT), Ningbo<br/>
   <sup>3</sup> Ningbo Key Laboratory of Spatial Intelligence and Digital Derivative
