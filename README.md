@@ -18,7 +18,7 @@
 
 <p align="center" width="50%">
   <a target="_blank">
-    <img src="/assets/mcmr.jpg" alt="MCMR Overview" style="width: 90%; min-width: 200px; display: block; margin: auto;">
+    <img src="/assets/mcmr.jpg" alt="MCMR Overview" style="width: 50%; min-width: 200px; display: block; margin: auto;">
   </a>
 </p> 
 
