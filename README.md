@@ -115,3 +115,16 @@ The following variables are available for customization in reranking scripts:
 - **INPUT_TOPK_JSONL:** Path to the generated top‑K file
 - **OUT_POINTWISE_JSONL:** Destination path for reranking results
 - **IMAGE_DIRS:** Path to the image assets
+
+## 📚 Citation
+```bibtex
+@misc{lu2026globalsimilarityfinegrainedmulticondition,
+      title={Beyond Global Similarity: Towards Fine-Grained, Multi-Condition Multimodal Retrieval}, 
+      author={Xuan Lu and Kangle Li and Haohang Huang and Rui Meng and Wenjun Zeng and Xiaoyu Shen},
+      year={2026},
+      eprint={2603.01082},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2603.01082}, 
+}
+```
