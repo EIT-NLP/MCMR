@@ -6,16 +6,23 @@
   <sup>3</sup> Ningbo Key Laboratory of Spatial Intelligence and Digital Derivative
 </div>
 
+<p align="center">
+  <a href="https://arxiv.org/abs/2603.01082"><img src="https://img.shields.io/badge/Paper-arXiv-b31b1b.svg" alt="Paper"></a>
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-green.svg" alt="License"></a>
+  <a href="https://huggingface.co/datasets/Lux1997/MCMR" target="_blank"><img src=https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace%20Datasets-27b3b4.svg></a>
+</p>
+
 <!-- <p align="center" width="100%">
   <a target="_blank">
     <img src="./assets/mcmr_overview.png" alt="MCMR Overview" style="width: 90%; min-width: 200px; display: block; margin: auto;">
   </a>
 </p> -->
 
+
 ## **🌟 Introduction**
 
-**MCMR (Multi-Conditional Multimodal Retrieval)** is a large-scale, high-difficulty benchmark designed to evaluate fine-grained and multi-condition cross-modal retrieval. Unlike traditional retrieval tasks that rely on coarse-grained global similarity, MCMR emphasizes the alignment of complex, interdependent constraints across visual and textual modalities.
-
+[**MCMR (Multi-Conditional Multimodal Retrieval)** is a large-scale, high-difficulty benchmark designed to evaluate fine-grained and multi-condition cross-modal retrieval. Unlike traditional retrieval tasks that rely on coarse-grained global similarity, MCMR emphasizes the alignment of complex, interdependent constraints across visual and textual modalities.
+](https://arxiv.org/abs/2603.01082)
 
 - **Diverse Domain Coverage:** Spans five distinct product domains: Upper Clothing, Bottom Clothing, Jewelry, Shoes, and Furniture.
 - **Fine-grained Multi-Condition Queries:** Each query integrates complementary visual cues and textual attributes, requiring models to satisfy all specified constraints simultaneously.
