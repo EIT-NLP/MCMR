@@ -12,11 +12,11 @@
 </div>
 
 
-<!-- <p align="center" width="100%">
+<p align="center" width="80%">
   <a target="_blank">
-    <img src="./assets/mcmr_overview.png" alt="MCMR Overview" style="width: 90%; min-width: 200px; display: block; margin: auto;">
+    <img src="/assets/mcmr.jpg" alt="MCMR Overview" style="width: 90%; min-width: 200px; display: block; margin: auto;">
   </a>
-</p> -->
+</p> 
 
 
 ## **🌟 Introduction**
