@@ -228,9 +228,9 @@ class LabelScorer:
         self.true_ids = self.tok("True", add_special_tokens=False).input_ids
         self.false_ids = self.tok("False", add_special_tokens=False).input_ids
         if not self.true_ids or not self.false_ids:
-            raise RuntimeError("标签分词为空：tokenizer 无法正确分词 'True' / 'False'。")
+            raise RuntimeError("Label tokenization is empty: tokenizer cannot tokenize 'True' / 'False' correctly.")
         if CONFIG["STRICT_SINGLE_TOKEN"] and (len(self.true_ids)!=1 or len(self.false_ids)!=1):
-            raise RuntimeError(f"STRICT_SINGLE_TOKEN=True，但分词结果不为单 token：len(True)={len(self.true_ids)}, len(False)={len(self.false_ids)}")
+            raise RuntimeError(f"STRICT_SINGLE_TOKEN=True, but labels are not single-token: len(True)={len(self.true_ids)}, len(False)={len(self.false_ids)}")
 
     def _pack_for_model(self, messages, padding: bool):
         """

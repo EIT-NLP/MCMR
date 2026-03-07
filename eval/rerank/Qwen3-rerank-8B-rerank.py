@@ -82,7 +82,7 @@ def extract_filename_from_url(url: Optional[str]) -> Optional[str]:
     return url.split("/")[-1] or None
 
 def find_local_image_path(any_candidate_obj: Dict[str, Any], fallback_url: Optional[str], candidate_id: Optional[str] = None) -> Optional[Path]:
-    """复用原有逻辑：在 IMAGE_DIRS 中查找图片"""
+    """Reuse the existing logic to locate images in IMAGE_DIRS."""
     url = None
     imgs = (any_candidate_obj or {}).get("images") or []
     for it in imgs:
@@ -122,7 +122,7 @@ def find_local_image_path(any_candidate_obj: Dict[str, Any], fallback_url: Optio
     return None
 
 def render_candidate_text(cand: Dict[str, Any]) -> str:
-    """将 candidate 字典转换为文本描述"""
+    """Convert a candidate dictionary into a text description."""
     title = str(cand.get("title") or "").strip()
     desc = cand.get("description") or []
     if isinstance(desc, list): desc = " ".join([str(x) for x in desc if x])
@@ -190,16 +190,16 @@ class LabelScorer:
         print(f"Label Tokens: '{self.pos_label}'->{self.pos_ids}, '{self.neg_label}'->{self.neg_ids}")
 
         if not self.pos_ids or not self.neg_ids:
-            raise RuntimeError(f"标签分词为空。请检查 '{self.pos_label}'/'{self.neg_label}' 是否在词表中。")
+            raise RuntimeError(f"Label tokenization is empty. Please check whether '{self.pos_label}'/'{self.neg_label}' exist in the vocabulary.")
             
         if bool(CONFIG.get("STRICT_SINGLE_TOKEN", False)):
             if len(self.pos_ids) != 1 or len(self.neg_ids) != 1:
-                raise RuntimeError(f"STRICT_SINGLE_TOKEN=True，但标签不为单 token。")
+                raise RuntimeError("STRICT_SINGLE_TOKEN=True, but labels are not single-token.")
 
     @torch.no_grad()
     def score_pair(self, query_text: str, cand_text: str, pil_img: Image.Image) -> Tuple[float, float, float]:
         """
-        返回 (p_pos, pos_logprob, neg_logprob)
+        Returns (p_pos, pos_logprob, neg_logprob)
         p_pos = p(Yes)
         """
         messages = build_messages(query_text, cand_text, pil_img)

@@ -138,47 +138,72 @@ def l2_normalize_np(v: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     n = np.linalg.norm(v, axis=-1, keepdims=True)
     return (v / (n + eps)).astype("float32")
 
+def build_faiss_ip_index(c_vecs: np.ndarray):
+    try:
+        import faiss
+    except Exception as e:
+        raise RuntimeError("faiss is not installed. Please install faiss-cpu or faiss-gpu.") from e
+    c_vecs = np.ascontiguousarray(c_vecs.astype("float32"))
+    dim = int(c_vecs.shape[1])
+    cpu_index = faiss.IndexFlatIP(dim)
+    if DEVICE == "cuda" and hasattr(faiss, "StandardGpuResources"):
+        try:
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+        except Exception as e:
+            print(f"[faiss] GPU index init failed, fallback to CPU: {e}")
+            index = cpu_index
+    else:
+        index = cpu_index
+    index.add(c_vecs)
+    return index
+
+def faiss_topk_search(index, q_vecs: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    q_vecs = np.ascontiguousarray(q_vecs.astype("float32"))
+    scores, indices = index.search(q_vecs, int(k))
+    return scores, indices
+
 
                                                       
 def check_mmembed_config(model_dir: str, retriever_dir: str):
     cfg_path = Path(model_dir) / "config.json"
     if not cfg_path.exists():
-        die(f"未找到 {cfg_path}，请确认 MM-Embed 已正确下载。")
+        die(f"Missing {cfg_path}. Please verify MM-Embed is downloaded correctly.")
     try:
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     except Exception as e:
-        die(f"解析 {cfg_path} 失败：{e}")
+        die(f"Failed to parse {cfg_path}: {e}")
 
     retriever = cfg.get("retriever")
     if retriever != retriever_dir:
         die(
-            "MM-Embed/config.json 的 'retriever' 未指向本地 NV-Embed-v2 根目录。\n"
-            f"  当前: {retriever}\n"
-            f"  期望: {retriever_dir}\n"
-            "请修改后重试（保持离线环境）。"
+            "MM-Embed/config.json 'retriever' is not pointing to the local NV-Embed-v2 root.\n"
+            f"  current: {retriever}\n"
+            f"  expected: {retriever_dir}\n"
+            "Please update it and retry in offline mode."
         )
 
     text_cfg = cfg.get("text_config") or {}
     t_path = text_cfg.get("_name_or_path")
     if t_path != model_dir:
         die(
-            "MM-Embed/config.json 的 'text_config._name_or_path' 必须改为 MM-Embed 根目录（使用本地分词器）。\n"
-            f"  当前: {t_path}\n"
-            f"  期望: {model_dir}\n"
-            "请修改后重试（保持离线环境）。"
+            "MM-Embed/config.json 'text_config._name_or_path' must be the MM-Embed root (for local tokenizer usage).\n"
+            f"  current: {t_path}\n"
+            f"  expected: {model_dir}\n"
+            "Please update it and retry in offline mode."
         )
 
     tok_json = Path(model_dir) / "tokenizer.json"
     if not tok_json.exists():
-        die(f"缺少本地分词器文件：{tok_json}，请确保 MM-Embed 根目录内含 tokenizer.json。")
+        die(f"Missing local tokenizer file: {tok_json}. Ensure tokenizer.json exists in the MM-Embed root.")
 
     if not Path(retriever_dir).exists():
-        die(f"未找到本地 NV-Embed-v2 目录：{retriever_dir}")
+        die(f"Local NV-Embed-v2 directory not found: {retriever_dir}")
 
 
                                                     
 def load_mmembed(model_dir: str):
-    """加载 MM-Embed 模型并包含热修复逻辑"""
+    """Load the MM-Embed model with hotfix logic."""
     print(f"[model] load: {model_dir}")
     model = AutoModel.from_pretrained(
         model_dir,
@@ -192,7 +217,7 @@ def load_mmembed(model_dir: str):
         model = model.to("cuda")
         
     if not hasattr(model, "encode"):
-        die("当前模型不支持 model.encode(...) 接口。请检查 MM-Embed 版本/权重。")
+        die("Current model does not support model.encode(...). Please verify MM-Embed version/checkpoint.")
 
                                                               
     try:
@@ -231,15 +256,15 @@ def load_mmembed(model_dir: str):
                                                                 
 @torch.no_grad()
 def encode_fused_batch_mmembed(model, texts: List[str], images: List[Image.Image]) -> np.ndarray:
-    """提取候选集图文融合向量"""
+    """Extract fused image-text embeddings for candidates."""
     if len(texts) != len(images):
-        die(f"编码批大小不一致：texts={len(texts)} vs images={len(images)}")
+        die(f"Mismatched batch size: texts={len(texts)} vs images={len(images)}")
 
     samples = [{"txt": t, "img": im} for t, im in zip(texts, images)]
     out = model.encode(samples, is_query=False, max_length=CONFIG["MAX_LENGTH"])
     
     if not isinstance(out, dict) or ("hidden_states" not in out):
-        die("model.encode(...) 返回值中未找到 'hidden_states' 字段。请检查 MM-Embed 版本/接口。")
+        die("model.encode(...) output does not contain 'hidden_states'. Please verify MM-Embed version/interface.")
 
     emb = out["hidden_states"]
     if isinstance(emb, torch.Tensor):
@@ -247,14 +272,14 @@ def encode_fused_batch_mmembed(model, texts: List[str], images: List[Image.Image
     elif isinstance(emb, np.ndarray):
         pass
     else:
-        die(f"'hidden_states' 类型不支持：{type(emb)}，需为 torch.Tensor 或 np.ndarray")
+        die(f"Unsupported 'hidden_states' type: {type(emb)}; expected torch.Tensor or np.ndarray")
 
                             
     return l2_normalize_np(emb)
 
 @torch.no_grad()
 def encode_queries_mmembed(model, queries: List[str], batch_size: int, instruction: str, max_length: int) -> np.ndarray:
-    """提取纯文本 Query 向量"""
+    """Extract text-only embeddings for queries."""
     all_vecs = []
     for i in tqdm(range(0, len(queries), batch_size), desc="Encoding Queries"):
         batch = queries[i:i+batch_size]
@@ -334,7 +359,7 @@ def load_queries_any(qspec: Any, max_q: Optional[int]):
     return queries, pos_sets, qids, origins
 
 def load_and_encode_candidates(model) -> Tuple[np.ndarray, List[Dict]]:
-    """读取并批量编码全部合法候选集，保留展示用的元数据"""
+    """Load and batch-encode all valid candidates with display metadata."""
     c_vecs = []
     c_metas = []
     
@@ -413,7 +438,7 @@ def load_and_encode_candidates(model) -> Tuple[np.ndarray, List[Dict]]:
 
                                                  
 def main():
-    print("===== MM-Embed Direct Eval Started (No FAISS) =====")
+    print("===== MM-Embed Direct Eval Started (FAISS) =====")
     
               
     check_mmembed_config(CONFIG["MODEL_DIR"], CONFIG["RETRIEVER_DIR"])
@@ -428,7 +453,7 @@ def main():
                  
     queries, pos_sets, qids, origins = load_queries_any(CONFIG["QUERIES"], CONFIG["MAX_QUERIES"])
     if not queries:
-        print("[warn] 未读取到有效的 query, 退出.")
+        print("[warn] No valid queries loaded. Exit.")
         return
 
     cover_flags = [(len(ps & in_index_cids) > 0) for ps in pos_sets]
@@ -441,7 +466,7 @@ def main():
     if eval_only:
         kept = [(q, ps, qid, org) for (q, ps, qid, org, keep) in zip(queries, pos_sets, qids, origins, cover_flags) if keep]
         if not kept:
-            print("[filter] WARN: 没有可评测的 queries（正样本均不在候选集中）。")
+            print("[filter] WARN: no evaluable queries (all positives are outside candidates).")
             return
         queries, pos_sets, qids, origins = zip(*kept)
         queries, pos_sets, qids, origins = list(queries), list(pos_sets), list(qids), list(origins)
@@ -459,19 +484,11 @@ def main():
     )
     
                                     
-    print("[search] Computing similarities and retrieving top-K...")
+    print("[search] Building Faiss index and retrieving top-K...")
     max_k = max(10, max(CONFIG["TOPK_LIST"]))
     top_k_req = min(max_k, len(c_metas))
-    
-    q_tensor = torch.tensor(Q, device=DEVICE)
-    c_tensor = torch.tensor(C, device=DEVICE)
-    
-                                                
-    sims = q_tensor @ c_tensor.T 
-    scores_tensor, indices_tensor = torch.topk(sims, k=top_k_req, dim=1)
-    
-    scores_np = scores_tensor.cpu().numpy()
-    indices_np = indices_tensor.cpu().numpy()
+    faiss_index = build_faiss_ip_index(C)
+    scores_np, indices_np = faiss_topk_search(faiss_index, Q, top_k_req)
 
                 
     all_rels = []

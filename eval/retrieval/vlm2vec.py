@@ -139,8 +139,33 @@ def l2_normalize_np(v: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     n = np.linalg.norm(v, axis=-1, keepdims=True)
     return (v / (n + eps)).astype("float32")
 
+def build_faiss_ip_index(c_vecs: np.ndarray):
+    try:
+        import faiss
+    except Exception as e:
+        raise RuntimeError("faiss is not installed. Please install faiss-cpu or faiss-gpu.") from e
+    c_vecs = np.ascontiguousarray(c_vecs.astype("float32"))
+    dim = int(c_vecs.shape[1])
+    cpu_index = faiss.IndexFlatIP(dim)
+    if DEVICE == "cuda" and hasattr(faiss, "StandardGpuResources"):
+        try:
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+        except Exception as e:
+            print(f"[faiss] GPU index init failed, fallback to CPU: {e}")
+            index = cpu_index
+    else:
+        index = cpu_index
+    index.add(c_vecs)
+    return index
+
+def faiss_topk_search(index, q_vecs: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    q_vecs = np.ascontiguousarray(q_vecs.astype("float32"))
+    scores, indices = index.search(q_vecs, int(k))
+    return scores, indices
+
 def move_tensors_to_device(batch: Dict, device: str) -> Dict:
-    """仅将张量移动到 device，保持 list/tuple 原样（与官方实现兼容）。"""
+    """Move only tensors to device while preserving list/tuple inputs for compatibility."""
     out = {}
     for k, v in batch.items():
         if torch.is_tensor(v):
@@ -157,7 +182,7 @@ def extract_filename_from_url(url: str) -> Optional[str]:
     return os.path.basename(base)
 
 def extract_image_source(obj: Dict) -> str:
-    """尝试从多个键提取图片资源路径/URL"""
+    """Try multiple keys to extract the image path/URL."""
     keys_try = ["image", "image_url", "img", "image_path", "imagePath", "imageName", "image_name", "images"]
     for k in keys_try:
         if k not in obj: continue
@@ -176,7 +201,7 @@ def extract_image_source(obj: Dict) -> str:
     return ""
 
 def find_image_gme(image_root: str, url_or_name: str) -> Optional[str]:
-    """GME 风格找图，支持递归子目录匹配。"""
+    """Locate image files in a GME-like way, including recursive subdirectory search."""
     if not url_or_name: return None
     
                  
@@ -205,7 +230,7 @@ def find_image_gme(image_root: str, url_or_name: str) -> Optional[str]:
     return None
 
 def render_text(obj: Dict, keys: Dict[str, str]) -> str:
-    """将候选集字段拼成一段纯文本"""
+    """Render candidate fields into a single plain-text string."""
     title = str(obj.get(keys["title"], "") or "")
     desc  = obj.get(keys["desc"], []) or []
     if isinstance(desc, str): desc = [desc]
@@ -225,7 +250,7 @@ def render_text(obj: Dict, keys: Dict[str, str]) -> str:
 
                                                              
 class VLM2VecManager:
-    """包装 VLM2Vec 模型，以便后续同时支持 query (纯文本) 和 target (图文) 的特征提取"""
+    """VLM2Vec wrapper that supports query (text-only) and target (image-text) feature extraction."""
     def __init__(self, model_path: str, processor_name: str, device="cuda", pooling="last", normalize=True, num_crops_tgt=4, num_crops_qry=1):
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.dummy_img = Image.new("RGB", (4, 4), 0)
@@ -263,7 +288,7 @@ class VLM2VecManager:
 
     @torch.no_grad()
     def encode_tgt_batch(self, texts: List[str], images: List[Image.Image], max_length: int) -> np.ndarray:
-        """提取候选集图文融合特征 (Target 侧)"""
+        """Extract fused image-text features for target-side candidates."""
                           
         if self.image_token:
             texts_in = [f"{self.image_token} {t}".strip() for t in texts]
@@ -285,7 +310,7 @@ class VLM2VecManager:
 
     @torch.no_grad()
     def encode_qry_batch(self, texts: List[str], max_length: int) -> np.ndarray:
-        """提取查询集文本特征 (Query 侧)"""
+        """Extract text features for query-side inputs."""
         dummy_imgs = [self.dummy_img for _ in texts]
         
         if self.image_token:
@@ -362,7 +387,7 @@ def load_queries_any(qspec: Any, max_q: Optional[int]):
     return queries, pos_sets, qids, origins
 
 def load_and_encode_candidates(manager: VLM2VecManager) -> Tuple[np.ndarray, List[Dict]]:
-    """读取并批量编码全部合法候选集，保留展示用的元数据"""
+    """Load and batch-encode all valid candidates with display metadata."""
     c_vecs = []
     c_metas = []
     
@@ -426,7 +451,7 @@ def load_and_encode_candidates(manager: VLM2VecManager) -> Tuple[np.ndarray, Lis
 
                                                  
 def main():
-    print("===== VLM2Vec Direct Eval Started (No FAISS) =====")
+    print("===== VLM2Vec Direct Eval Started (FAISS) =====")
     
                 
     processor_name = CONFIG["PROCESSOR"] or CONFIG["MODEL_DIR"]
@@ -447,7 +472,7 @@ def main():
                  
     queries, pos_sets, qids, origins = load_queries_any(CONFIG["QUERIES"], CONFIG["MAX_QUERIES"])
     if not queries:
-        print("[warn] 未读取到有效的 query, 退出.")
+        print("[warn] No valid queries loaded. Exit.")
         return
 
     cover_flags = [(len(ps & in_index_cids) > 0) for ps in pos_sets]
@@ -460,7 +485,7 @@ def main():
     if eval_only:
         kept = [(q, ps, qid, org) for (q, ps, qid, org, keep) in zip(queries, pos_sets, qids, origins, cover_flags) if keep]
         if not kept:
-            print("[filter] WARN: 没有可评测的 queries（正样本均不在候选集中）。")
+            print("[filter] WARN: no evaluable queries (all positives are outside candidates).")
             return
         queries, pos_sets, qids, origins = zip(*kept)
         queries, pos_sets, qids, origins = list(queries), list(pos_sets), list(qids), list(origins)
@@ -478,19 +503,11 @@ def main():
     Q = np.vstack(all_q_vecs)
     
                                     
-    print("[search] Computing similarities and retrieving top-K...")
+    print("[search] Building Faiss index and retrieving top-K...")
     max_k = max(10, max(CONFIG["TOPK_LIST"]))
     top_k_req = min(max_k, len(c_metas))
-    
-    q_tensor = torch.tensor(Q, device=DEVICE)
-    c_tensor = torch.tensor(C, device=DEVICE)
-    
-                                                
-    sims = q_tensor @ c_tensor.T 
-    scores_tensor, indices_tensor = torch.topk(sims, k=top_k_req, dim=1)
-    
-    scores_np = scores_tensor.cpu().numpy()
-    indices_np = indices_tensor.cpu().numpy()
+    faiss_index = build_faiss_ip_index(C)
+    scores_np, indices_np = faiss_topk_search(faiss_index, Q, top_k_req)
 
                 
     all_rels = []

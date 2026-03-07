@@ -22,7 +22,7 @@ os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 try:
     require_version(
         "transformers<4.52.0",
-        "GME 与 transformers>=4.52.0 兼容性较差，建议使用：pip install 'transformers==4.51.3'"
+        "GME has limited compatibility with transformers>=4.52.0. Recommended: pip install 'transformers==4.51.3'"
     )
 except Exception:
     pass
@@ -126,7 +126,7 @@ def pick_first_image_path(obj: Dict[str, Any], image_dir: str) -> Optional[Path]
     return p if p.exists() else None
 
 def render_text(obj: Dict[str, Any], max_chars: int) -> str:
-    """提取商品描述：title | desc | features + price/date"""
+    """Build product text: title | description | features + price/date."""
     title = str(obj.get("title") or "").strip()
     desc  = obj.get("description") or []
     if isinstance(desc, list): desc = " ".join([str(x) for x in desc if x])
@@ -146,10 +146,35 @@ def l2_normalize_np(v: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     n = np.linalg.norm(v, axis=-1, keepdims=True)
     return (v / (n + eps)).astype("float32")
 
+def build_faiss_ip_index(c_vecs: np.ndarray):
+    try:
+        import faiss
+    except Exception as e:
+        raise RuntimeError("faiss is not installed. Please install faiss-cpu or faiss-gpu.") from e
+    c_vecs = np.ascontiguousarray(c_vecs.astype("float32"))
+    dim = int(c_vecs.shape[1])
+    cpu_index = faiss.IndexFlatIP(dim)
+    if DEVICE == "cuda" and hasattr(faiss, "StandardGpuResources"):
+        try:
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+        except Exception as e:
+            print(f"[faiss] GPU index init failed, fallback to CPU: {e}")
+            index = cpu_index
+    else:
+        index = cpu_index
+    index.add(c_vecs)
+    return index
+
+def faiss_topk_search(index, q_vecs: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    q_vecs = np.ascontiguousarray(q_vecs.astype("float32"))
+    scores, indices = index.search(q_vecs, int(k))
+    return scores, indices
+
 
                                                     
 def load_gme(model_dir: str):
-    """加载 GME 模型（严格使用官方 trust_remote_code 接口）"""
+    """Load the GME model using the official trust_remote_code interface."""
     print(f"[model] Loading GME from: {model_dir}")
     
                                       
@@ -168,25 +193,25 @@ def load_gme(model_dir: str):
     model.to(DEVICE).eval()
 
     if not hasattr(model, "get_fused_embeddings") or not hasattr(model, "get_text_embeddings"):
-        raise RuntimeError("该模型权重未暴露 get_fused_embeddings 或 get_text_embeddings，请确认是 GME 权重。")
+        raise RuntimeError("Model weights do not expose get_fused_embeddings/get_text_embeddings. Please verify this is a GME checkpoint.")
         
     return model
 
 
                                                                 
 def encode_fused_batch_gme(model, texts: List[str], pil_images: List[Image.Image]) -> np.ndarray:
-    """提取候选集图文融合向量"""
+    """Extract fused image-text embeddings for candidates."""
     with torch.no_grad(), AMP_CTX:
         emb = model.get_fused_embeddings(texts=texts, images=pil_images)
         if isinstance(emb, (list, tuple)):
             emb = emb[0]
         if not isinstance(emb, torch.Tensor):
-            raise RuntimeError("get_fused_embeddings 未返回张量")
+            raise RuntimeError("get_fused_embeddings did not return a tensor.")
         vec = emb.detach().float().cpu().numpy()
         return l2_normalize_np(vec)
 
 def encode_queries_gme(model, texts: List[str], instruction: str, batch_size: int) -> np.ndarray:
-    """提取纯文本 Query 向量"""
+    """Extract text-only embeddings for queries."""
     all_vecs = []
     for i in tqdm(range(0, len(texts), batch_size), desc="Encoding Queries"):
         batch = texts[i:i + batch_size]
@@ -258,7 +283,7 @@ def load_queries_any(qspec: Any, max_q: Optional[int]):
     return queries, pos_sets, qids, origins
 
 def load_and_encode_candidates(model) -> Tuple[np.ndarray, List[Dict]]:
-    """读取并批量编码全部合法候选集，保留展示用的元数据"""
+    """Load and batch-encode all valid candidates with display metadata."""
     c_vecs = []
     c_metas = []
     
@@ -329,7 +354,7 @@ def load_and_encode_candidates(model) -> Tuple[np.ndarray, List[Dict]]:
 
                                                  
 def main():
-    print("===== GME Direct Eval Started (No FAISS) =====")
+    print("===== GME Direct Eval Started (FAISS) =====")
     
              
     model = load_gme(CONFIG["MODEL_DIR"])
@@ -341,7 +366,7 @@ def main():
                  
     queries, pos_sets, qids, origins = load_queries_any(CONFIG["QUERIES"], CONFIG["MAX_QUERIES"])
     if not queries:
-        print("[warn] 未读取到有效的 query, 退出.")
+        print("[warn] No valid queries loaded. Exit.")
         return
 
     cover_flags = [(len(ps & in_index_cids) > 0) for ps in pos_sets]
@@ -354,7 +379,7 @@ def main():
     if eval_only:
         kept = [(q, ps, qid, org) for (q, ps, qid, org, keep) in zip(queries, pos_sets, qids, origins, cover_flags) if keep]
         if not kept:
-            print("[filter] WARN: 没有可评测的 queries（正样本均不在候选集中）。")
+            print("[filter] WARN: no evaluable queries (all positives are outside candidates).")
             return
         queries, pos_sets, qids, origins = zip(*kept)
         queries, pos_sets, qids, origins = list(queries), list(pos_sets), list(qids), list(origins)
@@ -366,19 +391,11 @@ def main():
     Q = encode_queries_gme(model, queries, CONFIG["T2I_PROMPT"], CONFIG["BATCH_SIZE"])
     
                                     
-    print("[search] Computing similarities and retrieving top-K...")
+    print("[search] Building Faiss index and retrieving top-K...")
     max_k = max(10, max(CONFIG["TOPK_LIST"]))
     top_k_req = min(max_k, len(c_metas))
-    
-    q_tensor = torch.tensor(Q, device=DEVICE)
-    c_tensor = torch.tensor(C, device=DEVICE)
-    
-                                                
-    sims = q_tensor @ c_tensor.T 
-    scores_tensor, indices_tensor = torch.topk(sims, k=top_k_req, dim=1)
-    
-    scores_np = scores_tensor.cpu().numpy()
-    indices_np = indices_tensor.cpu().numpy()
+    faiss_index = build_faiss_ip_index(C)
+    scores_np, indices_np = faiss_topk_search(faiss_index, Q, top_k_req)
 
                 
     all_rels = []

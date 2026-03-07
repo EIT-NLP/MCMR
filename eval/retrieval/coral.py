@@ -121,7 +121,7 @@ def pick_first_image_path(obj: Dict[str, Any], image_dir: str) -> Optional[Path]
     return p if p.exists() else None
 
 def render_text(obj: Dict[str, Any], max_chars: int) -> str:
-    """提取商品描述：title | desc | features + price/date"""
+    """Build product text: title | description | features + price/date."""
     title = str(obj.get("title") or "").strip()
     desc  = obj.get("description") or []
     if isinstance(desc, list): desc = " ".join([str(x) for x in desc if x])
@@ -140,6 +140,31 @@ def render_text(obj: Dict[str, Any], max_chars: int) -> str:
 def l2_normalize_np(v: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     n = np.linalg.norm(v, axis=-1, keepdims=True)
     return (v / (n + eps)).astype("float32")
+
+def build_faiss_ip_index(c_vecs: np.ndarray):
+    try:
+        import faiss
+    except Exception as e:
+        raise RuntimeError("faiss is not installed. Please install faiss-cpu or faiss-gpu.") from e
+    c_vecs = np.ascontiguousarray(c_vecs.astype("float32"))
+    dim = int(c_vecs.shape[1])
+    cpu_index = faiss.IndexFlatIP(dim)
+    if DEVICE == "cuda" and hasattr(faiss, "StandardGpuResources"):
+        try:
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+        except Exception as e:
+            print(f"[faiss] GPU index init failed, fallback to CPU: {e}")
+            index = cpu_index
+    else:
+        index = cpu_index
+    index.add(c_vecs)
+    return index
+
+def faiss_topk_search(index, q_vecs: np.ndarray, k: int) -> Tuple[np.ndarray, np.ndarray]:
+    q_vecs = np.ascontiguousarray(q_vecs.astype("float32"))
+    scores, indices = index.search(q_vecs, int(k))
+    return scores, indices
 
 
                                                                       
@@ -322,7 +347,7 @@ def load_queries_any(qspec: Any, max_q: Optional[int]):
     return queries, pos_sets, qids, origins
 
 def load_and_encode_candidates(model, processor) -> Tuple[np.ndarray, List[Dict]]:
-    """读取并批量编码全部合法候选集，保留展示用的元数据"""
+    """Load and batch-encode all valid candidates with display metadata."""
     c_vecs = []
     c_metas = []
     
@@ -393,7 +418,7 @@ def load_and_encode_candidates(model, processor) -> Tuple[np.ndarray, List[Dict]
 
                                                  
 def main():
-    print("===== Direct Eval Started (No FAISS) =====")
+    print("===== Direct Eval Started (FAISS) =====")
     
              
     model, processor = load_coral(CONFIG["MODEL_DIR"], CONFIG["PROCESSOR_DIR"])
@@ -405,7 +430,7 @@ def main():
                  
     queries, pos_sets, qids, origins = load_queries_any(CONFIG["QUERIES"], CONFIG["MAX_QUERIES"])
     if not queries:
-        print("[warn] 未读取到有效的 query, 退出.")
+        print("[warn] No valid queries loaded. Exit.")
         return
 
     cover_flags = [(len(ps & in_index_cids) > 0) for ps in pos_sets]
@@ -418,7 +443,7 @@ def main():
     if eval_only:
         kept = [(q, ps, qid, org) for (q, ps, qid, org, keep) in zip(queries, pos_sets, qids, origins, cover_flags) if keep]
         if not kept:
-            print("[filter] WARN: 没有可评测的 queries（正样本均不在候选集中）。")
+            print("[filter] WARN: no evaluable queries (all positives are outside candidates).")
             return
         queries, pos_sets, qids, origins = zip(*kept)
         queries, pos_sets, qids, origins = list(queries), list(pos_sets), list(qids), list(origins)
@@ -430,19 +455,11 @@ def main():
     Q = encode_queries_coral(model, processor, queries, CONFIG["BATCH_SIZE"])
     
                                     
-    print("[search] Computing similarities and retrieving top-K...")
+    print("[search] Building Faiss index and retrieving top-K...")
     max_k = max(10, max(CONFIG["TOPK_LIST"]))
     top_k_req = min(max_k, len(c_metas))
-    
-    q_tensor = torch.tensor(Q, device=DEVICE)
-    c_tensor = torch.tensor(C, device=DEVICE)
-    
-                                   
-    sims = q_tensor @ c_tensor.T 
-    scores_tensor, indices_tensor = torch.topk(sims, k=top_k_req, dim=1)
-    
-    scores_np = scores_tensor.cpu().numpy()
-    indices_np = indices_tensor.cpu().numpy()
+    faiss_index = build_faiss_ip_index(C)
+    scores_np, indices_np = faiss_topk_search(faiss_index, Q, top_k_req)
 
                 
     all_rels = []

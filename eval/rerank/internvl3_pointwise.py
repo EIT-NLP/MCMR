@@ -183,9 +183,9 @@ def load_internvl(model_dir: str, model_type: str):
 
 def build_messages(query_text: str, candidate_text: str, pil_img: Image.Image) -> List[Dict[str, Any]]:
     """
-    InternVL3 的 chat_template（template="internvl2_5"）期望 message["content"] 为字符串。
-    因此这里不再传入 [ {type:"image"}, {type:"text"} ] 列表；
-    图片通过 processor(..., images=[pil_img]) 传入，文本里只保留占位符 <image>。
+    InternVL3 chat_template (template="internvl2_5") expects message["content"] to be a string.
+    So this function does not pass a [ {type:"image"}, {type:"text"} ] list.
+    The image is fed via processor(..., images=[pil_img]), while text keeps only the <image> placeholder.
     """
     user_text = (
         f"<image>\n"
@@ -227,10 +227,13 @@ class LabelScorer:
         self.true_ids = self.tok("True", add_special_tokens=False).input_ids
         self.false_ids = self.tok("False", add_special_tokens=False).input_ids
         if not self.true_ids or not self.false_ids:
-            raise RuntimeError("标签分词为空：请检查 tokenizer 是否能正确分词 'True' / 'False'。")
+            raise RuntimeError("Label tokenization is empty: please verify tokenizer can tokenize 'True' / 'False'.")
         if bool(CONFIG.get("STRICT_SINGLE_TOKEN", False)):
             if len(self.true_ids) != 1 or len(self.false_ids) != 1:
-                raise RuntimeError(f"STRICT_SINGLE_TOKEN=True，但分词结果不为单 token：len(True)={len(self.true_ids)}, len(False)={len(self.false_ids)}。请更换模型/词表或关闭该开关。")
+                raise RuntimeError(
+                    f"STRICT_SINGLE_TOKEN=True, but labels are not single-token: len(True)={len(self.true_ids)}, len(False)={len(self.false_ids)}. "
+                    "Please switch model/tokenizer or disable this flag."
+                )
                                                                          
         if self.tok.pad_token_id is None and getattr(self.tok, "eos_token_id", None) is not None:
             self.tok.pad_token = self.tok.eos_token
@@ -311,8 +314,8 @@ class LabelScorer:
     @torch.no_grad()
     def score_batch(self, prompt_texts: List[str], pil_imgs: List[Image.Image]) -> Tuple[List[float], List[float], List[float]]:
         """
-        对一批样本进行 True/False 二分类打分（与 score_pair 等价的批量版）：
-          返回三个等长列表：p_true_list, true_lp_list, false_lp_list
+        Score a batch with True/False binary classification (batched equivalent of score_pair):
+          Returns three equal-length lists: p_true_list, true_lp_list, false_lp_list
         """
         assert len(prompt_texts) == len(pil_imgs) and len(prompt_texts) > 0
         B = len(prompt_texts)
@@ -347,7 +350,7 @@ class LabelScorer:
                                                                              
             pad_id = getattr(self.tok, "pad_token_id", None)
             if pad_id is None:
-                raise RuntimeError("tokenizer 未提供 attention_mask，且 pad_token_id 不可用，无法确定每条样本的 prompt 长度。")
+                raise RuntimeError("Tokenizer did not provide attention_mask and pad_token_id is unavailable, so prompt length per sample cannot be determined.")
             prompt_lens = (input_ids_prompt != pad_id).sum(dim=1).tolist()
 
         def branch_logprob_batched(label_ids: List[int]) -> List[float]:

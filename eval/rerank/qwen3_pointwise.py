@@ -79,7 +79,7 @@ def extract_filename_from_url(url: Optional[str]) -> Optional[str]:
     return url.split("/")[-1] or None
 
 def find_local_image_path(any_candidate_obj: Dict[str, Any], fallback_url: Optional[str], candidate_id: Optional[str] = None) -> Optional[Path]:
-    """从 candidate['images'] 或 item['image_url'] 提取第一个 URL 文件名，在 IMAGE_DIRS 里找本地文件。"""
+    """Extract the first image filename from candidate['images'] or item['image_url'], then locate it in IMAGE_DIRS."""
     url = None
     imgs = (any_candidate_obj or {}).get("images") or []
     for it in imgs:
@@ -171,18 +171,21 @@ class LabelScorer:
         self.false_ids = self.tok("False", add_special_tokens=False).input_ids
                                           
         if not self.true_ids or not self.false_ids:
-            raise RuntimeError("标签分词为空：请检查 tokenizer 是否能正确分词 'True' / 'False'。")
+            raise RuntimeError("Label tokenization is empty: please verify tokenizer can tokenize 'True' / 'False'.")
                                                        
         if bool(CONFIG.get("STRICT_SINGLE_TOKEN", False)):
             if len(self.true_ids) != 1 or len(self.false_ids) != 1:
-                raise RuntimeError(f"STRICT_SINGLE_TOKEN=True，但分词结果不为单 token：len(True)={len(self.true_ids)}, len(False)={len(self.false_ids)}。请更换模型/词表或关闭该开关。")
+                raise RuntimeError(
+                    f"STRICT_SINGLE_TOKEN=True, but labels are not single-token: len(True)={len(self.true_ids)}, len(False)={len(self.false_ids)}. "
+                    "Please switch model/tokenizer or disable this flag."
+                )
 
     @torch.no_grad()
     def score_pair(self, query_text: str, cand_text: str, pil_img: Image.Image) -> Tuple[float, float, float]:
         """
-        返回 (p_true, true_logprob, false_logprob)
-        计算方式：在 chat 模板上 add_generation_prompt=True，随后对两条分支（接 True 或接 False）各自做一次前向，
-        累加标签 token 的对数似然；对 [true,false] 取 softmax。
+        Returns (p_true, true_logprob, false_logprob).
+        Computation: build chat prompt with add_generation_prompt=True, run one forward for each branch
+        (append True vs append False), sum label-token log-likelihoods, then softmax over [true, false].
         """
         messages = build_messages(query_text, cand_text, pil_img)
 

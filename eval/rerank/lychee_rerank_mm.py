@@ -90,7 +90,7 @@ def extract_filename_from_url(url: Optional[str]) -> Optional[str]:
     return url.split("/")[-1] or None
 
 def find_local_image_path(any_candidate_obj: Dict[str, Any], fallback_url: Optional[str], candidate_id: Optional[str] = None) -> Optional[Path]:
-    """在 IMAGE_DIRS 中查找图片"""
+    """Locate image files in IMAGE_DIRS."""
     url = None
     imgs = (any_candidate_obj or {}).get("images") or []
     for it in imgs:
@@ -130,7 +130,7 @@ def find_local_image_path(any_candidate_obj: Dict[str, Any], fallback_url: Optio
     return None
 
 def render_candidate_text(cand: Dict[str, Any]) -> str:
-    """将 candidate 字典转换为文本描述"""
+    """Convert a candidate dictionary into a text description."""
     title = str(cand.get("title") or "").strip()
     desc = cand.get("description") or []
     if isinstance(desc, list): desc = " ".join([str(x) for x in desc if x])
@@ -178,7 +178,7 @@ def load_model(model_dir: str):
 
                                                                 
 def format_content(text: Optional[str], image_path: Optional[str], prefix: str = 'Query:') -> List[Dict[str, Any]]:
-    """Helper: 格式化单个部分（Query 或 Document）"""
+    """Helper: format a single section (Query or Document)."""
     content = []
           
     content.append({'type': 'text', 'text': prefix})
@@ -204,8 +204,8 @@ def build_lychee_messages(
     doc_image_path: Optional[str]
 ) -> List[Dict[str, Any]]:
     """
-    构建符合 Lychee 要求的 messages 列表。
-    结构:
+    Build a messages list in the format required by Lychee.
+    Structure:
     System: Judge whether...
     User: <Instruct>: ... <Query>: ... \n<Document>: ...
     """
@@ -264,12 +264,12 @@ class LabelScorer:
         print(f"Label Tokens: '{self.pos_label}'->{self.pos_id}, '{self.neg_label}'->{self.neg_id}")
 
         if self.pos_id is None or self.neg_id is None:
-            raise RuntimeError(f"标签分词为空。请检查 '{self.pos_label}'/'{self.neg_label}' 是否在词表中。")
+            raise RuntimeError(f"Label tokenization is empty. Please check whether '{self.pos_label}'/'{self.neg_label}' exist in the vocabulary.")
 
     @torch.no_grad()
     def score_pair(self, query_text: str, cand_text: str, img_path: str) -> Tuple[float, float, float]:
         """
-        返回 (p_yes, yes_logprob, no_logprob)
+        Returns (p_yes, yes_logprob, no_logprob)
         """
                      
         instruction = CONFIG["INSTRUCTION"]
